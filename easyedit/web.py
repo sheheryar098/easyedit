@@ -161,8 +161,27 @@ def progress_of(slug: str, log: Path) -> dict:
             if total:
                 pct = 0.68 + 0.3 * min(1.0, done / total)
                 stage = f"rendering {done}/{total} frames"
-    err = [l for l in text.splitlines() if "error" in l.lower() or "Traceback" in l]
-    return {"stage": stage, "progress": round(pct, 3), "error": err[-1][:300] if err else None}
+    return {"stage": stage, "progress": round(pct, 3), "error": run_error(slug, text)}
+
+
+def run_error(slug: str, text: str) -> str | None:
+    """A Traceback, util.die()'s `error:` line, or a non-zero process exit.
+
+    Harmless log noise (yt-dlp `ERROR:`, `montage source skipped`, `download failed`,
+    and a slug like `the-terror`) must not mark a running job as failed.
+    """
+    err = None
+    for line in text.splitlines():
+        lower = line.lower()
+        if "skipped" in lower or "download failed" in lower:
+            continue
+        if "Traceback" in line or line.lstrip().startswith("error:"):
+            err = line[:300]
+    proc = (_runs.get(slug) or {}).get("proc")
+    code = proc.poll() if proc else None
+    if code:
+        return err or f"exit {code}"
+    return err
 
 
 def frames_done(slug: str) -> tuple[int, int]:
