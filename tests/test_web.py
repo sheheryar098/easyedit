@@ -123,8 +123,23 @@ class ProgressOfTest(unittest.TestCase):
         err = self.error_of()
         self.assertEqual(err, self.DIE)
 
-    def test_die_error_is_ignored_when_the_line_is_a_skipped_download(self):
-        self.write("error: download failed (clip): network")
+    def test_die_download_failed_message_is_a_failure(self):
+        line = "error: download failed (clip): network"
+        self.write(line)
+        self.assertEqual(self.error_of(), line)
+
+    def test_die_required_stage_skipped_is_a_failure(self):
+        line = "error: required stage skipped"
+        self.write(line)
+        self.assertEqual(self.error_of(), line)
+
+    def test_die_every_download_failed_is_a_failure(self):
+        line = "error: every download failed for: some query"
+        self.write(line)
+        self.assertEqual(self.error_of(), line)
+
+    def test_traceback_header_not_ordinary_traceback_word(self):
+        self.write("[   0.4s] quote: Traceback is the word they remember")
         self.assertIsNone(self.error_of())
 
     def test_nonzero_proc_exit_is_a_failure(self):
@@ -134,6 +149,15 @@ class ProgressOfTest(unittest.TestCase):
         with mock.patch.dict(web._runs, {"fight-club": {"proc": proc}}):
             err = self.error_of("fight-club")
         self.assertEqual(err, "exit 1")
+
+    def test_nonzero_proc_exit_with_missing_or_empty_log(self):
+        proc = mock.Mock()
+        proc.poll.return_value = 2
+        with mock.patch.dict(web._runs, {"fight-club": {"proc": proc}}):
+            self.assertFalse(self.log.exists())
+            self.assertEqual(self.error_of("fight-club"), "exit 2")
+            self.log.write_text("", encoding="utf-8")
+            self.assertEqual(self.error_of("fight-club"), "exit 2")
 
     def test_running_or_successful_proc_does_not_invent_an_error(self):
         self.write(self.SKIPPED)

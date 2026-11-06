@@ -27,6 +27,9 @@ PORT = int(os.environ.get("EASYEDIT_PORT", "4331"))
 WEB = Path(__file__).parent / "web"
 _SLUG = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
 mimetypes.add_type("image/svg+xml", ".svg")  # missing from the Windows registry on some machines
+# util.die() / CPython print these at column 0; timestamped log() lines do not.
+_DIE_PREFIX = "error:"
+_TRACEBACK_HEADER = "Traceback (most recent call last):"
 
 
 def picture_bytes(raw: bytes, content_type: str) -> bytes:
@@ -165,17 +168,16 @@ def progress_of(slug: str, log: Path) -> dict:
 
 
 def run_error(slug: str, text: str) -> str | None:
-    """A Traceback, util.die()'s `error:` line, or a non-zero process exit.
+    """A real failure: die()'s `error:` line, a traceback header, or a non-zero exit.
 
-    Harmless log noise (yt-dlp `ERROR:`, `montage source skipped`, `download failed`,
-    and a slug like `the-terror`) must not mark a running job as failed.
+    Timestamped log() noise (montage skipped, download failed, yt-dlp ERROR:) and
+    slugs like the-terror do not use those prefixes, so they are not failures.
+    A die() message that happens to contain "skipped" or "download failed" still is.
     """
     err = None
     for line in text.splitlines():
-        lower = line.lower()
-        if "skipped" in lower or "download failed" in lower:
-            continue
-        if "Traceback" in line or line.lstrip().startswith("error:"):
+        stripped = line.lstrip()
+        if stripped.startswith(_DIE_PREFIX) or stripped.startswith(_TRACEBACK_HEADER):
             err = line[:300]
     proc = (_runs.get(slug) or {}).get("proc")
     code = proc.poll() if proc else None
